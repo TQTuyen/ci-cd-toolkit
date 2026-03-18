@@ -55,6 +55,7 @@ runs:
         version: ${{ inputs.package-manager-version }}
 
     - name: Setup Node.js (pnpm/npm)
+      id: setup-node
       if: inputs.package-manager != 'bun'
       uses: actions/setup-node@v4
       with:
