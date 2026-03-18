@@ -1,0 +1,35 @@
+# Example: Nx Monorepo with affected commands
+# Copy this file to your repo's .github/workflows/ directory
+
+name: CI — Nx Monorepo
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
+    with:
+      package-manager: pnpm
+      nx-affected: true
+
+  typecheck:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-typecheck.yml@main
+    with:
+      package-manager: pnpm
+      nx-affected: true
+
+  test:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-test.yml@main
+    with:
+      package-manager: pnpm
+      nx-affected: true
+
+  build:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-build.yml@main
+    with:
+      package-manager: pnpm
+      nx-affected: true

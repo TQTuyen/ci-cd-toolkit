@@ -1,0 +1,42 @@
+# Example: npm library publish on release
+# Copy this file to your repo's .github/workflows/ directory
+
+name: CI/CD — npm Library
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  lint:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
+    with:
+      package-manager: pnpm
+
+  typecheck:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-typecheck.yml@main
+    with:
+      package-manager: pnpm
+
+  test:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-test.yml@main
+    with:
+      package-manager: pnpm
+      coverage: true
+    secrets:
+      codecov-token: ${{ secrets.CODECOV_TOKEN }}
+
+  publish:
+    if: github.event_name == 'release'
+    needs: [lint, typecheck, test]
+    uses: org/ci-cd-toolkit/.github/workflows/cd-npm-publish.yml@main
+    with:
+      package-manager: pnpm
+      access: public
+      provenance: true
+    secrets:
+      npm-token: ${{ secrets.NPM_TOKEN }}

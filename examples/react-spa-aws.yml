@@ -1,0 +1,35 @@
+# Example: React SPA deployed to AWS S3 + CloudFront
+# Copy this file to your repo's .github/workflows/ directory
+
+name: CI/CD — React SPA (AWS)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
+    with:
+      package-manager: pnpm
+
+  build:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-build.yml@main
+    with:
+      package-manager: pnpm
+      artifact-name: react-build
+      artifact-path: dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [lint, build]
+    uses: org/ci-cd-toolkit/.github/workflows/cd-deploy-s3.yml@main
+    with:
+      s3-bucket: my-react-app-bucket
+      artifact-name: react-build
+      cloudfront-distribution-id: E1234567890ABC
+      aws-region: us-east-1
+    secrets:
+      aws-role-arn: ${{ secrets.AWS_ROLE_ARN }}

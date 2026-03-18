@@ -1,0 +1,53 @@
+# Example: NestJS API deployed to GCP Cloud Run via GAR
+# Copy this file to your repo's .github/workflows/ directory
+
+name: CI/CD — NestJS API (GCP)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
+    with:
+      package-manager: pnpm
+
+  typecheck:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-typecheck.yml@main
+    with:
+      package-manager: pnpm
+
+  test:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-test.yml@main
+    with:
+      package-manager: pnpm
+      coverage: true
+    secrets:
+      codecov-token: ${{ secrets.CODECOV_TOKEN }}
+
+  push-image:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [lint, typecheck, test]
+    uses: org/ci-cd-toolkit/.github/workflows/cd-deploy-gar.yml@main
+    with:
+      repository: my-project/my-repo/my-nestjs-api
+      gcp-region: us-central1
+    secrets:
+      wif-provider: ${{ secrets.GCP_WIF_PROVIDER }}
+      service-account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+  deploy:
+    needs: [push-image]
+    uses: org/ci-cd-toolkit/.github/workflows/cd-deploy-cloud-run.yml@main
+    with:
+      service: my-nestjs-api
+      image: ${{ needs.push-image.outputs.image-uri }}
+      region: us-central1
+      env-vars: |
+        NODE_ENV=production
+    secrets:
+      wif-provider: ${{ secrets.GCP_WIF_PROVIDER }}
+      service-account: ${{ secrets.GCP_SERVICE_ACCOUNT }}

@@ -1,0 +1,36 @@
+# Example: React SPA deployed to GCS + Cloud CDN
+# Copy this file to your repo's .github/workflows/ directory
+
+name: CI/CD — React SPA (GCP)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
+    with:
+      package-manager: pnpm
+
+  build:
+    uses: org/ci-cd-toolkit/.github/workflows/ci-build.yml@main
+    with:
+      package-manager: pnpm
+      artifact-name: react-build
+      artifact-path: dist
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [lint, build]
+    uses: org/ci-cd-toolkit/.github/workflows/cd-deploy-gcs.yml@main
+    with:
+      bucket: gs://my-react-app-bucket
+      artifact-name: react-build
+      cdn-invalidate: true
+      cdn-url-map: my-app-url-map
+    secrets:
+      wif-provider: ${{ secrets.GCP_WIF_PROVIDER }}
+      service-account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
