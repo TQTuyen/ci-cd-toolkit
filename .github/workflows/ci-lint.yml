@@ -1,0 +1,73 @@
+name: CI — Lint
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version
+        type: string
+        default: "20"
+      package-manager:
+        description: Package manager (pnpm, npm, or bun)
+        type: string
+        default: pnpm
+      working-directory:
+        description: Working directory
+        type: string
+        default: "."
+      lint-command:
+        description: Lint command to run
+        type: string
+        default: lint
+      nx-affected:
+        description: Use Nx affected to only lint changed projects
+        type: boolean
+        default: false
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-lint-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ inputs.nx-affected && 0 || 1 }}
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ inputs.node-version }}
+          package-manager: ${{ inputs.package-manager }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Setup Nx SHAs
+        if: inputs.nx-affected
+        uses: ./.github/actions/setup-nx
+
+      - name: Lint
+        if: "!inputs.nx-affected"
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          case "${{ inputs.package-manager }}" in
+            pnpm) pnpm run ${{ inputs.lint-command }} ;;
+            npm)  npm run ${{ inputs.lint-command }} ;;
+            bun)  bun run ${{ inputs.lint-command }} ;;
+          esac
+
+      - name: Lint (Nx affected)
+        if: inputs.nx-affected
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: npx nx affected --target=${{ inputs.lint-command }}

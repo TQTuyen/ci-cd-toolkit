@@ -1,0 +1,95 @@
+name: CD — Deploy to GCS
+
+on:
+  workflow_call:
+    inputs:
+      bucket:
+        description: GCS bucket (e.g. gs://my-bucket)
+        type: string
+        required: true
+      source-path:
+        description: Local path to sync to GCS
+        type: string
+        default: dist
+      artifact-name:
+        description: Download artifact from ci-build before deploying
+        type: string
+        default: ""
+      delete-removed:
+        description: Delete files from GCS that are not in source
+        type: boolean
+        default: true
+      cdn-invalidate:
+        description: Invalidate Cloud CDN cache
+        type: boolean
+        default: false
+      cdn-url-map:
+        description: Cloud CDN URL map name for cache invalidation
+        type: string
+        default: ""
+      project-id:
+        description: GCP project ID
+        type: string
+        default: ""
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+    secrets:
+      wif-provider:
+        description: Workload Identity Federation provider
+        required: false
+      service-account:
+        description: GCP service account email
+        required: false
+      credentials-json:
+        description: GCP service account key JSON (fallback)
+        required: false
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-gcs-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup GCP
+        uses: ./.github/actions/setup-gcp
+        with:
+          workload-identity-provider: ${{ secrets.wif-provider }}
+          service-account: ${{ secrets.service-account }}
+          credentials-json: ${{ secrets.credentials-json }}
+          project-id: ${{ inputs.project-id }}
+
+      - name: Download artifact
+        if: inputs.artifact-name != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ inputs.source-path }}
+
+      - name: Sync to GCS
+        shell: bash
+        run: |
+          RSYNC_ARGS=("${{ inputs.source-path }}" "${{ inputs.bucket }}")
+          if [[ "${{ inputs.delete-removed }}" == "true" ]]; then
+            RSYNC_ARGS+=("--delete-unmatched-destination-objects")
+          fi
+
+          gcloud storage rsync -r "${RSYNC_ARGS[@]}"
+
+      - name: Invalidate Cloud CDN cache
+        if: inputs.cdn-invalidate && inputs.cdn-url-map != ''
+        shell: bash
+        run: |
+          gcloud compute url-maps invalidate-cdn-cache "${{ inputs.cdn-url-map }}" \
+            --path "/*" \
+            --async

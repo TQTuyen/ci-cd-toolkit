@@ -1,0 +1,33 @@
+name: Setup Nx
+description: Setup Nx SHAs for affected commands with optional Nx Cloud
+
+inputs:
+  main-branch:
+    description: Main branch name for computing affected SHAs
+    required: false
+    default: main
+  nx-cloud-access-token:
+    description: Nx Cloud access token for distributed caching
+    required: false
+
+outputs:
+  base:
+    description: Base SHA for Nx affected commands
+    value: ${{ steps.set-shas.outputs.base }}
+  head:
+    description: Head SHA for Nx affected commands
+    value: ${{ steps.set-shas.outputs.head }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set Nx Cloud token
+      if: inputs.nx-cloud-access-token != ''
+      shell: bash
+      run: echo "NX_CLOUD_ACCESS_TOKEN=${{ inputs.nx-cloud-access-token }}" >> "$GITHUB_ENV"
+
+    - name: Derive SHAs for Nx affected commands
+      id: set-shas
+      uses: nrwl/nx-set-shas@v4
+      with:
+        main-branch-name: ${{ inputs.main-branch }}

@@ -1,0 +1,94 @@
+name: CD — Deploy to S3
+
+on:
+  workflow_call:
+    inputs:
+      s3-bucket:
+        description: S3 bucket name (e.g. my-bucket or s3://my-bucket)
+        type: string
+        required: true
+      source-path:
+        description: Local path to sync to S3
+        type: string
+        default: dist
+      cloudfront-distribution-id:
+        description: CloudFront distribution ID for cache invalidation
+        type: string
+        default: ""
+      aws-region:
+        description: AWS region
+        type: string
+        default: us-east-1
+      artifact-name:
+        description: Download artifact from ci-build before deploying
+        type: string
+        default: ""
+      delete-removed:
+        description: Delete files from S3 that are not in source
+        type: boolean
+        default: true
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+    secrets:
+      aws-role-arn:
+        description: AWS IAM role ARN (OIDC, preferred)
+        required: false
+      aws-access-key-id:
+        description: AWS access key ID (static keys fallback)
+        required: false
+      aws-secret-access-key:
+        description: AWS secret access key (static keys fallback)
+        required: false
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-s3-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup AWS
+        uses: ./.github/actions/setup-aws
+        with:
+          role-to-assume: ${{ secrets.aws-role-arn }}
+          aws-access-key-id: ${{ secrets.aws-access-key-id }}
+          aws-secret-access-key: ${{ secrets.aws-secret-access-key }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Download artifact
+        if: inputs.artifact-name != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ inputs.source-path }}
+
+      - name: Sync to S3
+        shell: bash
+        run: |
+          BUCKET="${{ inputs.s3-bucket }}"
+          [[ "$BUCKET" != s3://* ]] && BUCKET="s3://${BUCKET}"
+
+          SYNC_ARGS=("${{ inputs.source-path }}" "$BUCKET")
+          if [[ "${{ inputs.delete-removed }}" == "true" ]]; then
+            SYNC_ARGS+=("--delete")
+          fi
+
+          aws s3 sync "${SYNC_ARGS[@]}"
+
+      - name: Invalidate CloudFront cache
+        if: inputs.cloudfront-distribution-id != ''
+        shell: bash
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id "${{ inputs.cloudfront-distribution-id }}" \
+            --paths "/*"

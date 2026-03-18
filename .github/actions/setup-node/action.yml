@@ -1,0 +1,99 @@
+name: Setup Node.js
+description: Setup Node.js with package manager (pnpm/npm/bun) and dependency caching
+
+inputs:
+  node-version:
+    description: Node.js version to use
+    required: false
+    default: "20"
+  node-version-file:
+    description: File containing the Node.js version (e.g. .nvmrc, .node-version)
+    required: false
+  package-manager:
+    description: Package manager to use (pnpm, npm, or bun)
+    required: false
+    default: pnpm
+  package-manager-version:
+    description: Package manager version
+    required: false
+    default: latest
+  install-dependencies:
+    description: Whether to install dependencies
+    required: false
+    default: "true"
+  working-directory:
+    description: Working directory for install commands
+    required: false
+    default: "."
+
+outputs:
+  run-command:
+    description: The run command prefix for the selected package manager
+    value: ${{ steps.set-run-command.outputs.run-command }}
+  cache-hit:
+    description: Whether the dependency cache was hit
+    value: ${{ steps.cache-result.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set run command
+      id: set-run-command
+      shell: bash
+      run: |
+        case "${{ inputs.package-manager }}" in
+          pnpm) echo "run-command=pnpm exec" >> "$GITHUB_OUTPUT" ;;
+          npm)  echo "run-command=npx" >> "$GITHUB_OUTPUT" ;;
+          bun)  echo "run-command=bun run" >> "$GITHUB_OUTPUT" ;;
+          *)    echo "::error::Unsupported package manager: ${{ inputs.package-manager }}" && exit 1 ;;
+        esac
+
+    - name: Setup pnpm
+      if: inputs.package-manager == 'pnpm'
+      uses: pnpm/action-setup@v4
+      with:
+        version: ${{ inputs.package-manager-version }}
+
+    - name: Setup Node.js (pnpm/npm)
+      if: inputs.package-manager != 'bun'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version-file && '' || inputs.node-version }}
+        node-version-file: ${{ inputs.node-version-file }}
+        cache: ${{ inputs.package-manager == 'pnpm' && 'pnpm' || 'npm' }}
+
+    - name: Setup Bun
+      if: inputs.package-manager == 'bun'
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: ${{ inputs.package-manager-version }}
+
+    - name: Setup Node.js (bun - for node compatibility)
+      if: inputs.package-manager == 'bun'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version-file && '' || inputs.node-version }}
+        node-version-file: ${{ inputs.node-version-file }}
+
+    - name: Install dependencies (pnpm)
+      if: inputs.install-dependencies == 'true' && inputs.package-manager == 'pnpm'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: pnpm install --frozen-lockfile
+
+    - name: Install dependencies (npm)
+      if: inputs.install-dependencies == 'true' && inputs.package-manager == 'npm'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: npm ci
+
+    - name: Install dependencies (bun)
+      if: inputs.install-dependencies == 'true' && inputs.package-manager == 'bun'
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: bun install --frozen-lockfile
+
+    - name: Set cache result
+      id: cache-result
+      shell: bash
+      run: echo "cache-hit=${{ steps.setup-node.outputs.cache-hit || 'false' }}" >> "$GITHUB_OUTPUT"

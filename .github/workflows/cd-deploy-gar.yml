@@ -1,0 +1,114 @@
+name: CD — Deploy to Google Artifact Registry
+
+on:
+  workflow_call:
+    inputs:
+      repository:
+        description: GAR repository path (e.g. my-project/my-repo/my-image)
+        type: string
+        required: true
+      gcp-region:
+        description: GCP region
+        type: string
+        default: us-central1
+      dockerfile:
+        description: Path to Dockerfile
+        type: string
+        default: Dockerfile
+      context:
+        description: Docker build context
+        type: string
+        default: "."
+      build-args:
+        description: Docker build arguments (newline-separated KEY=VALUE)
+        type: string
+        default: ""
+      platforms:
+        description: Target platforms
+        type: string
+        default: linux/amd64
+      project-id:
+        description: GCP project ID
+        type: string
+        default: ""
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+    secrets:
+      wif-provider:
+        description: Workload Identity Federation provider
+        required: true
+      service-account:
+        description: GCP service account email
+        required: true
+    outputs:
+      image-uri:
+        description: Full GAR image URI with tag
+        value: ${{ jobs.deploy.outputs.image-uri }}
+      image-digest:
+        description: The image digest
+        value: ${{ jobs.deploy.outputs.image-digest }}
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-gar-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      image-uri: ${{ steps.image-uri.outputs.uri }}
+      image-digest: ${{ steps.build-push.outputs.digest }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup GCP
+        uses: ./.github/actions/setup-gcp
+        with:
+          workload-identity-provider: ${{ secrets.wif-provider }}
+          service-account: ${{ secrets.service-account }}
+          project-id: ${{ inputs.project-id }}
+
+      - name: Setup Docker
+        uses: ./.github/actions/setup-docker
+        with:
+          registry: gar
+          gcp-region: ${{ inputs.gcp-region }}
+
+      - name: Compute image URI
+        id: image-uri
+        shell: bash
+        run: |
+          TAG="${GITHUB_SHA::8}"
+          URI="${{ inputs.gcp-region }}-docker.pkg.dev/${{ inputs.repository }}:${TAG}"
+          echo "uri=${URI}" >> "$GITHUB_OUTPUT"
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ inputs.gcp-region }}-docker.pkg.dev/${{ inputs.repository }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+
+      - name: Build and push to GAR
+        id: build-push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          platforms: ${{ inputs.platforms }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ inputs.build-args }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

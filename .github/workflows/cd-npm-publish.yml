@@ -1,0 +1,91 @@
+name: CD — npm Publish
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version
+        type: string
+        default: "20"
+      package-manager:
+        description: Package manager (pnpm, npm, or bun)
+        type: string
+        default: pnpm
+      working-directory:
+        description: Working directory
+        type: string
+        default: "."
+      registry-url:
+        description: npm registry URL
+        type: string
+        default: "https://registry.npmjs.org"
+      access:
+        description: Package access level (public or restricted)
+        type: string
+        default: public
+      provenance:
+        description: Publish with provenance attestation
+        type: boolean
+        default: true
+      dry-run:
+        description: Perform a dry run without publishing
+        type: boolean
+        default: false
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+    secrets:
+      npm-token:
+        description: npm authentication token
+        required: true
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-npm-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ inputs.node-version }}
+          package-manager: ${{ inputs.package-manager }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Build
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          case "${{ inputs.package-manager }}" in
+            pnpm) pnpm run build ;;
+            npm)  npm run build ;;
+            bun)  bun run build ;;
+          esac
+
+      - name: Publish to npm
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.npm-token }}
+        run: |
+          PUBLISH_ARGS=("--access" "${{ inputs.access }}")
+
+          if [[ "${{ inputs.provenance }}" == "true" ]]; then
+            PUBLISH_ARGS+=("--provenance")
+          fi
+
+          if [[ "${{ inputs.dry-run }}" == "true" ]]; then
+            PUBLISH_ARGS+=("--dry-run")
+          fi
+
+          npm publish "${PUBLISH_ARGS[@]}"

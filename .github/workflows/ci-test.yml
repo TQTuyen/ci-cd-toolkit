@@ -1,0 +1,98 @@
+name: CI — Test
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version
+        type: string
+        default: "20"
+      package-manager:
+        description: Package manager (pnpm, npm, or bun)
+        type: string
+        default: pnpm
+      working-directory:
+        description: Working directory
+        type: string
+        default: "."
+      test-command:
+        description: Test command to run
+        type: string
+        default: test
+      coverage:
+        description: Upload coverage to Codecov
+        type: boolean
+        default: false
+      coverage-files:
+        description: Comma-separated list of coverage report files
+        type: string
+        default: ""
+      coverage-flags:
+        description: Codecov flags
+        type: string
+        default: ""
+      nx-affected:
+        description: Use Nx affected to only test changed projects
+        type: boolean
+        default: false
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+    secrets:
+      codecov-token:
+        description: Codecov upload token
+        required: false
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-test-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: ${{ inputs.nx-affected && 0 || 1 }}
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ inputs.node-version }}
+          package-manager: ${{ inputs.package-manager }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Setup Nx SHAs
+        if: inputs.nx-affected
+        uses: ./.github/actions/setup-nx
+
+      - name: Test
+        if: "!inputs.nx-affected"
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          case "${{ inputs.package-manager }}" in
+            pnpm) pnpm run ${{ inputs.test-command }} ;;
+            npm)  npm run ${{ inputs.test-command }} ;;
+            bun)  bun run ${{ inputs.test-command }} ;;
+          esac
+
+      - name: Test (Nx affected)
+        if: inputs.nx-affected
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: npx nx affected --target=${{ inputs.test-command }}
+
+      - name: Upload coverage
+        if: inputs.coverage && !inputs.nx-affected
+        uses: ./.github/actions/codecov
+        with:
+          token: ${{ secrets.codecov-token }}
+          files: ${{ inputs.coverage-files }}
+          flags: ${{ inputs.coverage-flags }}
+          working-directory: ${{ inputs.working-directory }}

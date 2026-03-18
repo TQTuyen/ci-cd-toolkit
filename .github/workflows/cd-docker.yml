@@ -1,0 +1,143 @@
+name: CD — Docker Build & Push
+
+on:
+  workflow_call:
+    inputs:
+      image-name:
+        description: Docker image name (without registry prefix)
+        type: string
+        required: true
+      registry:
+        description: Container registry (ghcr, ecr, gar, dockerhub)
+        type: string
+        default: ghcr
+      dockerfile:
+        description: Path to Dockerfile
+        type: string
+        default: Dockerfile
+      context:
+        description: Docker build context
+        type: string
+        default: "."
+      build-args:
+        description: Docker build arguments (newline-separated KEY=VALUE)
+        type: string
+        default: ""
+      platforms:
+        description: Target platforms for multi-arch builds
+        type: string
+        default: linux/amd64
+      push:
+        description: Whether to push the image
+        type: boolean
+        default: true
+      tags:
+        description: Additional tags (newline-separated, overrides auto-generated)
+        type: string
+        default: ""
+      aws-region:
+        description: AWS region (for ECR)
+        type: string
+        default: us-east-1
+      gcp-region:
+        description: GCP region (for GAR)
+        type: string
+        default: us-central1
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+    secrets:
+      registry-token:
+        description: Registry token (GHCR token or DockerHub token)
+        required: false
+      aws-role-arn:
+        description: AWS IAM role ARN for ECR (OIDC)
+        required: false
+      dockerhub-username:
+        description: DockerHub username
+        required: false
+      wif-provider:
+        description: GCP Workload Identity Federation provider (for GAR)
+        required: false
+      service-account:
+        description: GCP service account email (for GAR)
+        required: false
+    outputs:
+      image-digest:
+        description: The image digest
+        value: ${{ jobs.docker.outputs.digest }}
+      image-tags:
+        description: The image tags
+        value: ${{ jobs.docker.outputs.tags }}
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-docker-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build-push.outputs.digest }}
+      tags: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup AWS (ECR)
+        if: inputs.registry == 'ecr'
+        uses: ./.github/actions/setup-aws
+        with:
+          role-to-assume: ${{ secrets.aws-role-arn }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Setup GCP (GAR)
+        if: inputs.registry == 'gar'
+        uses: ./.github/actions/setup-gcp
+        with:
+          workload-identity-provider: ${{ secrets.wif-provider }}
+          service-account: ${{ secrets.service-account }}
+
+      - name: Setup Docker
+        id: docker-setup
+        uses: ./.github/actions/setup-docker
+        with:
+          registry: ${{ inputs.registry }}
+          ghcr-token: ${{ secrets.registry-token || github.token }}
+          dockerhub-username: ${{ secrets.dockerhub-username }}
+          dockerhub-token: ${{ secrets.registry-token }}
+          aws-region: ${{ inputs.aws-region }}
+          gcp-region: ${{ inputs.gcp-region }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.docker-setup.outputs.registry-url }}/${{ inputs.image-name }}
+          tags: |
+            ${{ inputs.tags }}
+            type=sha,prefix=
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build and push
+        id: build-push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          platforms: ${{ inputs.platforms }}
+          push: ${{ inputs.push }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ inputs.build-args }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

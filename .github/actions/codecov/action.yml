@@ -1,0 +1,28 @@
+name: Upload to Codecov
+description: Upload code coverage reports to Codecov
+
+inputs:
+  token:
+    description: Codecov upload token
+    required: true
+  files:
+    description: Comma-separated list of coverage report files
+    required: false
+  flags:
+    description: Codecov flags for grouping coverage
+    required: false
+  working-directory:
+    description: Working directory containing coverage files
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        token: ${{ inputs.token }}
+        files: ${{ inputs.files }}
+        flags: ${{ inputs.flags }}
+        directory: ${{ inputs.working-directory }}
+        fail_ci_if_error: true

@@ -1,0 +1,103 @@
+name: CD — Deploy to AWS ECR
+
+on:
+  workflow_call:
+    inputs:
+      ecr-repository:
+        description: ECR repository name
+        type: string
+        required: true
+      dockerfile:
+        description: Path to Dockerfile
+        type: string
+        default: Dockerfile
+      context:
+        description: Docker build context
+        type: string
+        default: "."
+      build-args:
+        description: Docker build arguments (newline-separated KEY=VALUE)
+        type: string
+        default: ""
+      platforms:
+        description: Target platforms
+        type: string
+        default: linux/amd64
+      aws-region:
+        description: AWS region
+        type: string
+        default: us-east-1
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+    secrets:
+      aws-role-arn:
+        description: AWS IAM role ARN (OIDC)
+        required: true
+    outputs:
+      image-uri:
+        description: Full ECR image URI with tag
+        value: ${{ jobs.deploy.outputs.image-uri }}
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-ecr-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      image-uri: ${{ steps.image-uri.outputs.uri }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup AWS
+        id: aws
+        uses: ./.github/actions/setup-aws
+        with:
+          role-to-assume: ${{ secrets.aws-role-arn }}
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Setup Docker
+        uses: ./.github/actions/setup-docker
+        with:
+          registry: ecr
+          aws-region: ${{ inputs.aws-region }}
+
+      - name: Compute image URI
+        id: image-uri
+        shell: bash
+        run: |
+          TAG="${GITHUB_SHA::8}"
+          URI="${{ steps.aws.outputs.account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.ecr-repository }}:${TAG}"
+          echo "uri=${URI}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ steps.aws.outputs.account-id }}.dkr.ecr.${{ inputs.aws-region }}.amazonaws.com/${{ inputs.ecr-repository }}
+          tags: |
+            type=sha,prefix=
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+
+      - name: Build and push to ECR
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          platforms: ${{ inputs.platforms }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ inputs.build-args }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

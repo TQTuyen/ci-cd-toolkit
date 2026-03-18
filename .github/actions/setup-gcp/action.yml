@@ -1,0 +1,46 @@
+name: Setup GCP
+description: Configure GCP authentication via Workload Identity Federation (preferred) or service account key
+
+inputs:
+  workload-identity-provider:
+    description: Workload Identity Federation provider (preferred, e.g. projects/123/locations/global/workloadIdentityPools/pool/providers/provider)
+    required: false
+  service-account:
+    description: Service account email for WIF authentication
+    required: false
+  credentials-json:
+    description: Service account key JSON (fallback — less secure)
+    required: false
+  project-id:
+    description: GCP project ID
+    required: false
+  token-format:
+    description: Token format for authentication output
+    required: false
+    default: access_token
+
+outputs:
+  project-id:
+    description: The GCP project ID
+    value: ${{ steps.auth.outputs.project_id }}
+  access-token:
+    description: The GCP access token
+    value: ${{ steps.auth.outputs.access_token }}
+
+runs:
+  using: composite
+  steps:
+    - name: Authenticate to GCP
+      id: auth
+      uses: google-github-actions/auth@v2
+      with:
+        workload_identity_provider: ${{ inputs.workload-identity-provider }}
+        service_account: ${{ inputs.service-account }}
+        credentials_json: ${{ inputs.credentials-json }}
+        project_id: ${{ inputs.project-id }}
+        token_format: ${{ inputs.token-format }}
+
+    - name: Export access token
+      if: inputs.token-format == 'access_token'
+      shell: bash
+      run: echo "GOOGLE_ACCESS_TOKEN=${{ steps.auth.outputs.access_token }}" >> "$GITHUB_ENV"

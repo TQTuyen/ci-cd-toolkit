@@ -1,0 +1,52 @@
+name: Quality — CodeQL
+
+on:
+  workflow_call:
+    inputs:
+      languages:
+        description: Languages to analyze (comma-separated)
+        type: string
+        default: javascript-typescript
+      build-mode:
+        description: CodeQL build mode
+        type: string
+        default: none
+      queries:
+        description: CodeQL query suite
+        type: string
+        default: security-extended
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-codeql-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: true
+
+permissions:
+  security-events: write
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ${{ fromJSON(format('["{0}"]', join(fromJSON(format('["{0}"]', inputs.languages)), '","'))) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ inputs.build-mode }}
+          queries: ${{ inputs.queries }}
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}

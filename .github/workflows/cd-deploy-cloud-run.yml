@@ -1,0 +1,79 @@
+name: CD — Deploy to Cloud Run
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: Cloud Run service name
+        type: string
+        required: true
+      image:
+        description: Full container image URI (e.g. from cd-deploy-gar output)
+        type: string
+        required: true
+      region:
+        description: GCP region
+        type: string
+        default: us-central1
+      project-id:
+        description: GCP project ID
+        type: string
+        default: ""
+      env-vars:
+        description: Environment variables (newline-separated KEY=VALUE)
+        type: string
+        default: ""
+      flags:
+        description: Extra gcloud run deploy flags (e.g. --min-instances=1 --max-instances=10)
+        type: string
+        default: ""
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+    secrets:
+      wif-provider:
+        description: Workload Identity Federation provider
+        required: true
+      service-account:
+        description: GCP service account email
+        required: true
+    outputs:
+      url:
+        description: Cloud Run service URL
+        value: ${{ jobs.deploy.outputs.url }}
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-cloud-run-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup GCP
+        uses: ./.github/actions/setup-gcp
+        with:
+          workload-identity-provider: ${{ secrets.wif-provider }}
+          service-account: ${{ secrets.service-account }}
+          project-id: ${{ inputs.project-id }}
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ inputs.service }}
+          image: ${{ inputs.image }}
+          region: ${{ inputs.region }}
+          project_id: ${{ inputs.project-id }}
+          env_vars: ${{ inputs.env-vars }}
+          flags: ${{ inputs.flags }}

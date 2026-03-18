@@ -1,0 +1,91 @@
+name: CD — GitHub Release
+
+on:
+  workflow_call:
+    inputs:
+      tag-name:
+        description: Tag name for the release (defaults to github.ref_name)
+        type: string
+        default: ""
+      generate-notes:
+        description: Auto-generate release notes
+        type: boolean
+        default: true
+      draft:
+        description: Create as draft release
+        type: boolean
+        default: false
+      prerelease:
+        description: Mark as pre-release
+        type: boolean
+        default: false
+      artifact-name:
+        description: Download and attach artifact to release
+        type: string
+        default: ""
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+    outputs:
+      release-id:
+        description: The release ID
+        value: ${{ jobs.release.outputs.release-id }}
+      release-url:
+        description: The release URL
+        value: ${{ jobs.release.outputs.release-url }}
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-release-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    outputs:
+      release-id: ${{ steps.create-release.outputs.release-id }}
+      release-url: ${{ steps.create-release.outputs.release-url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifact
+        if: inputs.artifact-name != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: release-assets
+
+      - name: Create release
+        id: create-release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ inputs.tag-name || github.ref_name }}"
+          ARGS=("$TAG")
+
+          if [[ "${{ inputs.generate-notes }}" == "true" ]]; then
+            ARGS+=("--generate-notes")
+          fi
+
+          if [[ "${{ inputs.draft }}" == "true" ]]; then
+            ARGS+=("--draft")
+          fi
+
+          if [[ "${{ inputs.prerelease }}" == "true" ]]; then
+            ARGS+=("--prerelease")
+          fi
+
+          if [[ "${{ inputs.artifact-name }}" != "" ]]; then
+            ARGS+=("release-assets/"*)
+          fi
+
+          RESULT=$(gh release create "${ARGS[@]}" 2>&1)
+          RELEASE_URL=$(echo "$RESULT" | grep -o 'https://.*')
+
+          echo "release-url=${RELEASE_URL}" >> "$GITHUB_OUTPUT"
+          echo "release-id=$(gh release view "$TAG" --json id -q .id)" >> "$GITHUB_OUTPUT"
