@@ -58,7 +58,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup AWS
-        uses: ./.github/actions/setup-aws
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-aws@main
         with:
           role-to-assume: ${{ secrets.aws-role-arn }}
           aws-access-key-id: ${{ secrets.aws-access-key-id }}

@@ -92,21 +92,21 @@ jobs:
 
       - name: Setup AWS (ECR)
         if: inputs.registry == 'ecr'
-        uses: ./.github/actions/setup-aws
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-aws@main
         with:
           role-to-assume: ${{ secrets.aws-role-arn }}
           aws-region: ${{ inputs.aws-region }}
 
       - name: Setup GCP (GAR)
         if: inputs.registry == 'gar'
-        uses: ./.github/actions/setup-gcp
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-gcp@main
         with:
           workload-identity-provider: ${{ secrets.wif-provider }}
           service-account: ${{ secrets.service-account }}
 
       - name: Setup Docker
         id: docker-setup
-        uses: ./.github/actions/setup-docker
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-docker@main
         with:
           registry: ${{ inputs.registry }}
           ghcr-token: ${{ secrets.registry-token || github.token }}

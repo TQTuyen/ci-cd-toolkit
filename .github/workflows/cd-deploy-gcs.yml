@@ -62,7 +62,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup GCP
-        uses: ./.github/actions/setup-gcp
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-gcp@main
         with:
           workload-identity-provider: ${{ secrets.wif-provider }}
           service-account: ${{ secrets.service-account }}

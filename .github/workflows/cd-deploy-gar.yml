@@ -69,14 +69,14 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup GCP
-        uses: ./.github/actions/setup-gcp
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-gcp@main
         with:
           workload-identity-provider: ${{ secrets.wif-provider }}
           service-account: ${{ secrets.service-account }}
           project-id: ${{ inputs.project-id }}
 
       - name: Setup Docker
-        uses: ./.github/actions/setup-docker
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-docker@main
         with:
           registry: gar
           gcp-region: ${{ inputs.gcp-region }}

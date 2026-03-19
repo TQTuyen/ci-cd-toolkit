@@ -61,7 +61,7 @@ jobs:
           fetch-depth: ${{ inputs.nx-affected && 0 || 1 }}
 
       - name: Setup Node.js
-        uses: ./.github/actions/setup-node
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-node@main
         with:
           node-version: ${{ inputs.node-version }}
           package-manager: ${{ inputs.package-manager }}
@@ -69,7 +69,7 @@ jobs:
 
       - name: Setup Nx SHAs
         if: inputs.nx-affected
-        uses: ./.github/actions/setup-nx
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-nx@main
 
       - name: Test
         if: "!inputs.nx-affected"
@@ -90,7 +90,7 @@ jobs:
 
       - name: Upload coverage
         if: inputs.coverage && !inputs.nx-affected
-        uses: ./.github/actions/codecov
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/codecov@main
         with:
           token: ${{ secrets.codecov-token }}
           files: ${{ inputs.coverage-files }}

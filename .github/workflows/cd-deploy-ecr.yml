@@ -59,13 +59,13 @@ jobs:
 
       - name: Setup AWS
         id: aws
-        uses: ./.github/actions/setup-aws
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-aws@main
         with:
           role-to-assume: ${{ secrets.aws-role-arn }}
           aws-region: ${{ inputs.aws-region }}
 
       - name: Setup Docker
-        uses: ./.github/actions/setup-docker
+        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-docker@main
         with:
           registry: ecr
           aws-region: ${{ inputs.aws-region }}
