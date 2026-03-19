@@ -1,0 +1,79 @@
+name: CD — Database Migrate & Seed
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: Node.js version
+        type: string
+        default: "20"
+      package-manager:
+        description: Package manager (pnpm, npm, or bun)
+        type: string
+        default: pnpm
+      working-directory:
+        description: Working directory
+        type: string
+        default: "."
+      migration-command:
+        description: Migration command to run
+        type: string
+        default: migration:run
+      seed-command:
+        description: Seed command to run (leave empty to skip)
+        type: string
+        default: ""
+      concurrency-group:
+        description: Concurrency group name
+        type: string
+        default: ""
+    secrets:
+      database-url:
+        description: Database connection string
+        required: true
+
+concurrency:
+  group: ${{ inputs.concurrency-group || format('{0}-db-migrate-{1}', github.workflow, github.ref) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          node-version: ${{ inputs.node-version }}
+          package-manager: ${{ inputs.package-manager }}
+          working-directory: ${{ inputs.working-directory }}
+
+      - name: Run migrations
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          DATABASE_URL: ${{ secrets.database-url }}
+        run: |
+          case "${{ inputs.package-manager }}" in
+            pnpm) pnpm run ${{ inputs.migration-command }} ;;
+            npm)  npm run ${{ inputs.migration-command }} ;;
+            bun)  bun run ${{ inputs.migration-command }} ;;
+          esac
+
+      - name: Run seeds
+        if: inputs.seed-command != ''
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          DATABASE_URL: ${{ secrets.database-url }}
+        run: |
+          case "${{ inputs.package-manager }}" in
+            pnpm) pnpm run ${{ inputs.seed-command }} ;;
+            npm)  npm run ${{ inputs.seed-command }} ;;
+            bun)  bun run ${{ inputs.seed-command }} ;;
+          esac
