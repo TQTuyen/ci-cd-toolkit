@@ -3,14 +3,6 @@ name: CD — Deploy to GCE
 on:
   workflow_call:
     inputs:
-      instance:
-        description: GCE instance name
-        type: string
-        required: true
-      zone:
-        description: GCE zone
-        type: string
-        required: true
       image:
         description: Full container image URI (e.g. asia-southeast1-docker.pkg.dev/project/repo/image:tag)
         type: string
@@ -31,20 +23,19 @@ on:
         description: Docker restart policy
         type: string
         default: unless-stopped
-      project-id:
-        description: GCP project ID
-        type: string
-        default: ""
       concurrency-group:
         description: Concurrency group name
         type: string
         default: ""
     secrets:
-      wif-provider:
-        description: Workload Identity Federation provider
+      ssh-host:
+        description: GCE instance external IP or hostname
         required: true
-      service-account:
-        description: GCP service account email
+      ssh-user:
+        description: SSH username
+        required: true
+      ssh-key:
+        description: SSH private key
         required: true
       env-file-content:
         description: Content for .env file on the instance
@@ -56,109 +47,60 @@ concurrency:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Setup GCP
-        uses: TQTuyen/ci-cd-toolkit/.github/actions/setup-gcp@main
-        with:
-          workload-identity-provider: ${{ secrets.wif-provider }}
-          service-account: ${{ secrets.service-account }}
-          project-id: ${{ inputs.project-id }}
-
-      - name: Upload env file
-        if: env.HAS_ENV_FILE == 'true'
-        run: |
-          printf '%s\n' "$ENV_FILE_CONTENT" > /tmp/.env.upload
-          chmod 600 /tmp/.env.upload
-
-          gcloud compute ssh "$INSTANCE" \
-            --zone="$ZONE" \
-            --project="$PROJECT_ID" \
-            --quiet \
-            --command="mkdir -p $DEPLOY_PATH"
-
-          gcloud compute scp /tmp/.env.upload \
-            "$INSTANCE:$DEPLOY_PATH/.env" \
-            --zone="$ZONE" \
-            --project="$PROJECT_ID" \
-            --quiet
-
-          gcloud compute ssh "$INSTANCE" \
-            --zone="$ZONE" \
-            --project="$PROJECT_ID" \
-            --quiet \
-            --command="chmod 600 $DEPLOY_PATH/.env"
-
-          rm -f /tmp/.env.upload
+      - name: Deploy to GCE via SSH
+        uses: appleboy/ssh-action@v1
         env:
-          HAS_ENV_FILE: ${{ secrets.env-file-content != '' }}
-          ENV_FILE_CONTENT: ${{ secrets.env-file-content }}
-          INSTANCE: ${{ inputs.instance }}
-          ZONE: ${{ inputs.zone }}
-          PROJECT_ID: ${{ inputs.project-id }}
-          DEPLOY_PATH: ${{ inputs.deploy-path }}
-
-      - name: Create deploy script
-        run: |
-          cat > /tmp/deploy.sh << 'EOF'
-          set -e
-
-          mkdir -p "$DEPLOY_PATH"
-
-          # Authenticate Docker with GAR
-          REGISTRY=$(echo "$IMAGE" | cut -d"/" -f1)
-          gcloud auth configure-docker "$REGISTRY" --quiet
-
-          # Pull new image
-          docker pull "$IMAGE"
-
-          # Stop and remove existing container
-          docker stop "$CONTAINER_NAME" 2>/dev/null || true
-          docker rm "$CONTAINER_NAME" 2>/dev/null || true
-
-          # Build docker run command
-          RUN_CMD="docker run -d --name $CONTAINER_NAME --restart $RESTART_POLICY"
-
-          if [ -f "$DEPLOY_PATH/.env" ]; then
-            RUN_CMD="$RUN_CMD --env-file $DEPLOY_PATH/.env"
-          fi
-
-          if [ -n "$DOCKER_RUN_ARGS" ]; then
-            RUN_CMD="$RUN_CMD $DOCKER_RUN_ARGS"
-          fi
-
-          RUN_CMD="$RUN_CMD $IMAGE"
-          eval "$RUN_CMD"
-
-          # Cleanup old images
-          docker image prune -f
-          echo "Deployed $IMAGE as $CONTAINER_NAME successfully"
-          EOF
-          chmod +x /tmp/deploy.sh
-
-      - name: Deploy container
-        run: |
-          gcloud compute scp /tmp/deploy.sh \
-            "$INSTANCE:/tmp/deploy.sh" \
-            --zone="$ZONE" \
-            --project="$PROJECT_ID" \
-            --quiet
-
-          gcloud compute ssh "$INSTANCE" \
-            --zone="$ZONE" \
-            --project="$PROJECT_ID" \
-            --quiet \
-            --command="IMAGE=$IMAGE CONTAINER_NAME=$CONTAINER_NAME DEPLOY_PATH=$DEPLOY_PATH RESTART_POLICY=$RESTART_POLICY DOCKER_RUN_ARGS='$DOCKER_RUN_ARGS' bash /tmp/deploy.sh && rm -f /tmp/deploy.sh"
-        env:
-          INSTANCE: ${{ inputs.instance }}
-          ZONE: ${{ inputs.zone }}
-          PROJECT_ID: ${{ inputs.project-id }}
-          IMAGE: ${{ inputs.image }}
+          DEPLOY_IMAGE: ${{ inputs.image }}
           CONTAINER_NAME: ${{ inputs.container-name }}
           DEPLOY_PATH: ${{ inputs.deploy-path }}
           RESTART_POLICY: ${{ inputs.restart-policy }}
           DOCKER_RUN_ARGS: ${{ inputs.docker-run-args }}
+          ENV_FILE_CONTENT: ${{ secrets.env-file-content }}
+        with:
+          host: ${{ secrets.ssh-host }}
+          username: ${{ secrets.ssh-user }}
+          key: ${{ secrets.ssh-key }}
+          envs: DEPLOY_IMAGE,CONTAINER_NAME,DEPLOY_PATH,RESTART_POLICY,DOCKER_RUN_ARGS,ENV_FILE_CONTENT
+          script: |
+            set -e
+            mkdir -p "$DEPLOY_PATH"
+
+            # Write .env file if provided
+            if [ -n "$ENV_FILE_CONTENT" ]; then
+              printf '%s\n' "$ENV_FILE_CONTENT" > "$DEPLOY_PATH/.env"
+              chmod 600 "$DEPLOY_PATH/.env"
+            fi
+
+            # Authenticate Docker with GAR
+            REGISTRY=$(echo "$DEPLOY_IMAGE" | cut -d"/" -f1)
+            gcloud auth configure-docker "$REGISTRY" --quiet
+
+            # Pull new image
+            docker pull "$DEPLOY_IMAGE"
+
+            # Stop and remove existing container
+            docker stop "$CONTAINER_NAME" 2>/dev/null || true
+            docker rm "$CONTAINER_NAME" 2>/dev/null || true
+
+            # Run new container
+            RUN_CMD="docker run -d --name $CONTAINER_NAME --restart $RESTART_POLICY"
+
+            if [ -f "$DEPLOY_PATH/.env" ]; then
+              RUN_CMD="$RUN_CMD --env-file $DEPLOY_PATH/.env"
+            fi
+
+            if [ -n "$DOCKER_RUN_ARGS" ]; then
+              RUN_CMD="$RUN_CMD $DOCKER_RUN_ARGS"
+            fi
+
+            RUN_CMD="$RUN_CMD $DEPLOY_IMAGE"
+            eval "$RUN_CMD"
+
+            # Cleanup old images
+            docker image prune -f
+            echo "Deployed $DEPLOY_IMAGE as $CONTAINER_NAME successfully"
