@@ -68,7 +68,8 @@ jobs:
           envs: DEPLOY_IMAGE,CONTAINER_NAME,DEPLOY_PATH,RESTART_POLICY,DOCKER_RUN_ARGS,ENV_FILE_CONTENT
           script: |
             set -e
-            mkdir -p "$DEPLOY_PATH"
+            sudo mkdir -p "$DEPLOY_PATH"
+            sudo chown "$(whoami)" "$DEPLOY_PATH"
 
             # Write .env file if provided
             if [ -n "$ENV_FILE_CONTENT" ]; then
