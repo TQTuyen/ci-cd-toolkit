@@ -1,5 +1,4 @@
 # Example: NestJS API deployed to AWS ECR
-# Copy this file to your repo's .github/workflows/ directory
 
 name: CI/CD — NestJS API (AWS)
 
@@ -11,17 +10,17 @@ on:
 
 jobs:
   lint:
-    uses: org/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
     with:
       package-manager: pnpm
 
   typecheck:
-    uses: org/ci-cd-toolkit/.github/workflows/ci-typecheck.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-typecheck.yml@main
     with:
       package-manager: pnpm
 
   test:
-    uses: org/ci-cd-toolkit/.github/workflows/ci-test.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-test.yml@main
     with:
       package-manager: pnpm
       coverage: true
@@ -31,7 +30,7 @@ jobs:
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [lint, typecheck, test]
-    uses: org/ci-cd-toolkit/.github/workflows/cd-deploy-ecr.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/cd-deploy-ecr.yml@main
     with:
       ecr-repository: my-nestjs-api
       aws-region: us-east-1

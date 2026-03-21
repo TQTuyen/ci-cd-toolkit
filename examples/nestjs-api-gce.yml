@@ -1,6 +1,7 @@
-# Example: NestJS API deployed to GCP Cloud Run via GAR
+# Example: NestJS API deployed to GCE instance via GAR + SSH
+# Copy this file to your repo's .github/workflows/ directory
 
-name: CI/CD — NestJS API (GCP)
+name: CI/CD — NestJS API (GCE)
 
 on:
   push:
@@ -40,13 +41,14 @@ jobs:
 
   deploy:
     needs: [push-image]
-    uses: TQTuyen/ci-cd-toolkit/.github/workflows/cd-deploy-cloud-run.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/cd-deploy-gce.yml@main
     with:
-      service: my-nestjs-api
       image: ${{ needs.push-image.outputs.image-uri }}
-      region: us-central1
-      env-vars: |
-        NODE_ENV=production
+      container-name: my-nestjs-api
+      deploy-path: /opt/my-nestjs-api
+      docker-run-args: "-p 3000:3000 --network host"
     secrets:
-      wif-provider: ${{ secrets.GCP_WIF_PROVIDER }}
-      service-account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+      ssh-host: ${{ secrets.GCE_SSH_HOST }}
+      ssh-user: ${{ secrets.GCE_SSH_USER }}
+      ssh-key: ${{ secrets.GCE_SSH_KEY }}
+      env-file-content: ${{ secrets.APP_ENV_FILE }}

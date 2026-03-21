@@ -16,12 +16,12 @@ on:
 
 jobs:
   lint:
-    uses: org/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
     with:
       package-manager: pnpm
 
   test:
-    uses: org/ci-cd-toolkit/.github/workflows/ci-test.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-test.yml@main
     with:
       package-manager: pnpm
       coverage: true
@@ -29,7 +29,7 @@ jobs:
       codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   build:
-    uses: org/ci-cd-toolkit/.github/workflows/ci-build.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-build.yml@main
     with:
       package-manager: pnpm
       artifact-name: app-build
@@ -180,6 +180,60 @@ All CI workflows share these common inputs:
 
 ## CD Workflows
 
+### `cd-validate-version.yml`
+
+Validate that a git tag matches `package.json` version. Detects prerelease versions and computes the npm dist-tag.
+
+| Input | Default | Description |
+|---|---|---|
+| `package-path` | `package.json` | Path to package.json |
+
+| Output | Description |
+|---|---|
+| `version` | Package version without `v` prefix |
+| `tag` | Git tag name (e.g. `v1.0.0`) |
+| `is_prerelease` | `true` if version contains `-alpha`, `-beta`, `-rc`, `-next`, or `-canary` |
+| `npm_tag` | npm dist-tag to use (`latest`, `alpha`, `beta`, `rc`, `canary`, `next`) |
+
+### `cd-npm-publish.yml`
+
+Publish a package to npm with provenance. Supports downloading pre-built artifacts and publishing with a specific dist-tag.
+
+| Input | Default | Description |
+|---|---|---|
+| `node-version` | `20` | Node.js version |
+| `package-manager` | `pnpm` | Package manager |
+| `working-directory` | `.` | Working directory |
+| `registry-url` | `https://registry.npmjs.org` | npm registry |
+| `access` | `public` | `public` or `restricted` |
+| `tag` | `latest` | npm dist-tag (e.g. `latest`, `alpha`, `beta`, `rc`, `next`) |
+| `provenance` | `true` | Publish with provenance |
+| `dry-run` | `false` | Dry run mode |
+| `artifact-name` | | Download pre-built artifact instead of building (leave empty to build) |
+| `environment` | | GitHub environment for deployment protection rules |
+
+| Secret | Description |
+|---|---|
+| `npm-token` | *required* — npm auth token |
+
+### `cd-github-release.yml`
+
+Create a GitHub release with optional artifacts and custom release notes.
+
+| Input | Default | Description |
+|---|---|---|
+| `tag-name` | `github.ref_name` | Release tag |
+| `generate-notes` | `true` | Auto-generate release notes |
+| `body` | | Custom release body (overrides `generate-notes` when provided) |
+| `draft` | `false` | Create as draft |
+| `prerelease` | `false` | Mark as pre-release |
+| `artifact-name` | | Attach artifact to release |
+
+| Output | Description |
+|---|---|
+| `release-id` | Release ID |
+| `release-url` | Release URL |
+
 ### `cd-docker.yml`
 
 Build and push Docker images to any supported registry.
@@ -225,25 +279,6 @@ Build and push to AWS ECR.
 |---|---|
 | `image-uri` | Full ECR image URI |
 
-### `cd-deploy-s3.yml`
-
-Sync files to S3 with optional CloudFront invalidation.
-
-| Input | Default | Description |
-|---|---|---|
-| `s3-bucket` | *required* | S3 bucket name |
-| `source-path` | `dist` | Local source path |
-| `cloudfront-distribution-id` | | CloudFront distribution ID |
-| `aws-region` | `us-east-1` | AWS region |
-| `artifact-name` | | Download artifact first |
-| `delete-removed` | `true` | Delete files not in source |
-
-| Secret | Description |
-|---|---|
-| `aws-role-arn` | AWS role ARN (OIDC) |
-| `aws-access-key-id` | Static key (fallback) |
-| `aws-secret-access-key` | Static secret (fallback) |
-
 ### `cd-deploy-gar.yml`
 
 Build and push to Google Artifact Registry.
@@ -267,6 +302,25 @@ Build and push to Google Artifact Registry.
 |---|---|
 | `image-uri` | Full GAR image URI |
 | `image-digest` | Image digest |
+
+### `cd-deploy-s3.yml`
+
+Sync files to S3 with optional CloudFront invalidation.
+
+| Input | Default | Description |
+|---|---|---|
+| `s3-bucket` | *required* | S3 bucket name |
+| `source-path` | `dist` | Local source path |
+| `cloudfront-distribution-id` | | CloudFront distribution ID |
+| `aws-region` | `us-east-1` | AWS region |
+| `artifact-name` | | Download artifact first |
+| `delete-removed` | `true` | Delete files not in source |
+
+| Secret | Description |
+|---|---|
+| `aws-role-arn` | AWS role ARN (OIDC) |
+| `aws-access-key-id` | Static key (fallback) |
+| `aws-secret-access-key` | Static secret (fallback) |
 
 ### `cd-deploy-gcs.yml`
 
@@ -310,40 +364,40 @@ Deploy a container to Cloud Run.
 |---|---|
 | `url` | Cloud Run service URL |
 
-### `cd-npm-publish.yml`
+### `cd-deploy-gce.yml`
 
-Publish a package to npm with provenance.
+Deploy a container to a GCE instance via SSH and Docker.
+
+| Input | Default | Description |
+|---|---|---|
+| `image` | *required* | Full container image URI |
+| `container-name` | *required* | Name for the running container |
+| `deploy-path` | *required* | Directory on instance (e.g. `/opt/app`) |
+| `docker-run-args` | | Additional `docker run` arguments |
+| `restart-policy` | `unless-stopped` | Docker restart policy |
+
+| Secret | Description |
+|---|---|
+| `ssh-host` | *required* — GCE instance IP or hostname |
+| `ssh-user` | *required* — SSH username |
+| `ssh-key` | *required* — SSH private key |
+| `env-file-content` | Content for `.env` file on the instance |
+
+### `cd-db-migrate.yml`
+
+Run database migrations with optional seeding.
 
 | Input | Default | Description |
 |---|---|---|
 | `node-version` | `20` | Node.js version |
 | `package-manager` | `pnpm` | Package manager |
 | `working-directory` | `.` | Working directory |
-| `registry-url` | `https://registry.npmjs.org` | npm registry |
-| `access` | `public` | `public` or `restricted` |
-| `provenance` | `true` | Publish with provenance |
-| `dry-run` | `false` | Dry run mode |
+| `migration-command` | `migration:run` | Migration script name |
+| `seed-command` | | Seed script name (empty = skip) |
 
 | Secret | Description |
 |---|---|
-| `npm-token` | *required* — npm auth token |
-
-### `cd-github-release.yml`
-
-Create a GitHub release with optional artifacts.
-
-| Input | Default | Description |
-|---|---|---|
-| `tag-name` | `github.ref_name` | Release tag |
-| `generate-notes` | `true` | Auto-generate release notes |
-| `draft` | `false` | Create as draft |
-| `prerelease` | `false` | Mark as pre-release |
-| `artifact-name` | | Attach artifact to release |
-
-| Output | Description |
-|---|---|
-| `release-id` | Release ID |
-| `release-url` | Release URL |
+| `database-url` | *required* — Database connection string |
 
 ## Quality & Automation Workflows
 
@@ -367,10 +421,12 @@ See the [`examples/`](./examples/) directory for complete caller workflow files:
 
 - **[`nestjs-api-aws.yml`](./examples/nestjs-api-aws.yml)** — NestJS API with ECR deploy
 - **[`nestjs-api-gcp.yml`](./examples/nestjs-api-gcp.yml)** — NestJS API with GAR + Cloud Run deploy
+- **[`nestjs-api-gce.yml`](./examples/nestjs-api-gce.yml)** — NestJS API with GAR + GCE deploy via SSH
 - **[`react-spa-aws.yml`](./examples/react-spa-aws.yml)** — React SPA with S3/CloudFront deploy
 - **[`react-spa-gcp.yml`](./examples/react-spa-gcp.yml)** — React SPA with GCS/CDN deploy
 - **[`nx-monorepo.yml`](./examples/nx-monorepo.yml)** — Nx monorepo with affected commands
-- **[`npm-library.yml`](./examples/npm-library.yml)** — npm publish on release
+- **[`npm-library.yml`](./examples/npm-library.yml)** — npm library with simple publish on release
+- **[`npm-library-cd.yml`](./examples/npm-library-cd.yml)** — npm library with full CD pipeline (validate, build, publish with dist-tags, GitHub release)
 
 ## Secrets Reference
 
@@ -383,20 +439,27 @@ See the [`examples/`](./examples/) directory for complete caller workflow files:
 | `GCP_SERVICE_ACCOUNT` | GAR, GCS, Cloud Run | GCP service account email |
 | `CODECOV_TOKEN` | ci-test | Codecov upload token |
 | `NPM_TOKEN` | cd-npm-publish | npm authentication token |
+| `DATABASE_URL` | cd-db-migrate | Database connection string |
+| `SSH_HOST` | cd-deploy-gce | GCE instance IP or hostname |
+| `SSH_USER` | cd-deploy-gce | SSH username |
+| `SSH_KEY` | cd-deploy-gce | SSH private key |
 
 ## Permissions Reference
 
 | Workflow | Permissions needed |
 |---|---|
 | CI workflows | `contents: read` |
-| `cd-docker` | `contents: read`, `packages: write`, `id-token: write` |
-| `cd-deploy-ecr` | `contents: read`, `id-token: write` |
-| `cd-deploy-s3` | `contents: read`, `id-token: write` |
-| `cd-deploy-gar` | `contents: read`, `id-token: write` |
-| `cd-deploy-gcs` | `contents: read`, `id-token: write` |
-| `cd-deploy-cloud-run` | `contents: read`, `id-token: write` |
+| `cd-validate-version` | `contents: read` |
 | `cd-npm-publish` | `contents: read`, `id-token: write` |
 | `cd-github-release` | `contents: write` |
+| `cd-docker` | `contents: read`, `packages: write`, `id-token: write` |
+| `cd-deploy-ecr` | `contents: read`, `id-token: write` |
+| `cd-deploy-gar` | `contents: read`, `id-token: write` |
+| `cd-deploy-s3` | `contents: read`, `id-token: write` |
+| `cd-deploy-gcs` | `contents: read`, `id-token: write` |
+| `cd-deploy-cloud-run` | `contents: read`, `id-token: write` |
+| `cd-deploy-gce` | `contents: read` |
+| `cd-db-migrate` | `contents: read` |
 | `quality-codeql` | `security-events: write`, `contents: read` |
 | `auto-dependabot-merge` | `contents: write`, `pull-requests: write` |
 

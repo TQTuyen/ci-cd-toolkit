@@ -1,5 +1,4 @@
 # Example: React SPA deployed to GCS + Cloud CDN
-# Copy this file to your repo's .github/workflows/ directory
 
 name: CI/CD — React SPA (GCP)
 
@@ -11,12 +10,12 @@ on:
 
 jobs:
   lint:
-    uses: org/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
     with:
       package-manager: pnpm
 
   build:
-    uses: org/ci-cd-toolkit/.github/workflows/ci-build.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-build.yml@main
     with:
       package-manager: pnpm
       artifact-name: react-build
@@ -25,7 +24,7 @@ jobs:
   deploy:
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     needs: [lint, build]
-    uses: org/ci-cd-toolkit/.github/workflows/cd-deploy-gcs.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/cd-deploy-gcs.yml@main
     with:
       bucket: gs://my-react-app-bucket
       artifact-name: react-build
