@@ -1,0 +1,71 @@
+name: CD — Validate Version
+
+on:
+  workflow_call:
+    inputs:
+      package-path:
+        description: Path to package.json
+        type: string
+        default: package.json
+    outputs:
+      version:
+        description: Package version (without v prefix)
+        value: ${{ jobs.validate.outputs.version }}
+      tag:
+        description: Git tag name (e.g. v1.0.0)
+        value: ${{ jobs.validate.outputs.tag }}
+      is_prerelease:
+        description: Whether this is a prerelease version
+        value: ${{ jobs.validate.outputs.is_prerelease }}
+      npm_tag:
+        description: npm dist-tag to use (latest, alpha, beta, rc, next)
+        value: ${{ jobs.validate.outputs.npm_tag }}
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      npm_tag: ${{ steps.version.outputs.npm_tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate version
+        id: version
+        shell: bash
+        run: |
+          PKG_VERSION=$(jq -r '.version' ${{ inputs.package-path }})
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+
+          echo "Package version: $PKG_VERSION"
+          echo "Tag version: $TAG_VERSION"
+
+          if [[ "$PKG_VERSION" != "$TAG_VERSION" ]]; then
+            echo "::error::Version mismatch: package.json ($PKG_VERSION) != tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+          IS_PRERELEASE="false"
+          NPM_TAG="latest"
+          if [[ "$PKG_VERSION" =~ -(alpha|beta|rc|next|canary) ]]; then
+            IS_PRERELEASE="true"
+            if   [[ "$PKG_VERSION" =~ -alpha   ]]; then NPM_TAG="alpha"
+            elif [[ "$PKG_VERSION" =~ -beta    ]]; then NPM_TAG="beta"
+            elif [[ "$PKG_VERSION" =~ -rc      ]]; then NPM_TAG="rc"
+            elif [[ "$PKG_VERSION" =~ -canary  ]]; then NPM_TAG="canary"
+            else NPM_TAG="next"
+            fi
+          fi
+
+          echo "version=$PKG_VERSION"         >> "$GITHUB_OUTPUT"
+          echo "tag=$GITHUB_REF_NAME"         >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "npm_tag=$NPM_TAG"             >> "$GITHUB_OUTPUT"
+
+          echo "Version $PKG_VERSION validated (prerelease=$IS_PRERELEASE, npm_tag=$NPM_TAG)"

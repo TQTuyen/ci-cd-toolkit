@@ -23,6 +23,10 @@ on:
         description: Package access level (public or restricted)
         type: string
         default: public
+      tag:
+        description: npm dist-tag (e.g. latest, alpha, beta, rc, next)
+        type: string
+        default: latest
       provenance:
         description: Publish with provenance attestation
         type: boolean
@@ -31,6 +35,14 @@ on:
         description: Perform a dry run without publishing
         type: boolean
         default: false
+      artifact-name:
+        description: Download pre-built artifact instead of building (leave empty to build)
+        type: string
+        default: ""
+      environment:
+        description: GitHub environment for deployment protection rules
+        type: string
+        default: ""
       concurrency-group:
         description: Concurrency group name
         type: string
@@ -51,6 +63,7 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,7 +75,21 @@ jobs:
           package-manager: ${{ inputs.package-manager }}
           working-directory: ${{ inputs.working-directory }}
 
+      - name: Configure npm registry
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          registry-url: ${{ inputs.registry-url }}
+
+      - name: Download artifact
+        if: inputs.artifact-name != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ inputs.working-directory }}
+
       - name: Build
+        if: inputs.artifact-name == ''
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         run: |
@@ -79,6 +106,7 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.npm-token }}
         run: |
           PUBLISH_ARGS=("--access" "${{ inputs.access }}")
+          PUBLISH_ARGS+=("--tag" "${{ inputs.tag }}")
 
           if [[ "${{ inputs.provenance }}" == "true" ]]; then
             PUBLISH_ARGS+=("--provenance")

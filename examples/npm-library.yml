@@ -1,5 +1,5 @@
-# Example: npm library publish on release
-# Copy this file to your repo's .github/workflows/ directory
+# Example: npm library with simple publish on release
+# For a full CD pipeline with version validation, see npm-library-cd.yml
 
 name: CI/CD — npm Library
 
@@ -13,17 +13,17 @@ on:
 
 jobs:
   lint:
-    uses: org/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-lint.yml@main
     with:
       package-manager: pnpm
 
   typecheck:
-    uses: org/ci-cd-toolkit/.github/workflows/ci-typecheck.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-typecheck.yml@main
     with:
       package-manager: pnpm
 
   test:
-    uses: org/ci-cd-toolkit/.github/workflows/ci-test.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-test.yml@main
     with:
       package-manager: pnpm
       coverage: true
@@ -33,7 +33,7 @@ jobs:
   publish:
     if: github.event_name == 'release'
     needs: [lint, typecheck, test]
-    uses: org/ci-cd-toolkit/.github/workflows/cd-npm-publish.yml@main
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/cd-npm-publish.yml@main
     with:
       package-manager: pnpm
       access: public

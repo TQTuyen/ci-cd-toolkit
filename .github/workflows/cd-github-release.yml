@@ -11,6 +11,10 @@ on:
         description: Auto-generate release notes
         type: boolean
         default: true
+      body:
+        description: Custom release body (overrides generate-notes when provided)
+        type: string
+        default: ""
       draft:
         description: Create as draft release
         type: boolean
@@ -68,7 +72,10 @@ jobs:
           TAG="${{ inputs.tag-name || github.ref_name }}"
           ARGS=("$TAG")
 
-          if [[ "${{ inputs.generate-notes }}" == "true" ]]; then
+          BODY='${{ inputs.body }}'
+          if [[ -n "$BODY" ]]; then
+            ARGS+=("--notes" "$BODY")
+          elif [[ "${{ inputs.generate-notes }}" == "true" ]]; then
             ARGS+=("--generate-notes")
           fi
 

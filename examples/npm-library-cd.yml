@@ -1,0 +1,64 @@
+# Example: npm library with full CD pipeline
+# Triggered by version tags (v*.*.*) with version validation,
+# pre-built artifact publishing, dist-tag support, and GitHub releases.
+# Copy this file to your repo's .github/workflows/ directory
+
+name: CD — npm Library
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run (skip publish)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  validate:
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/cd-validate-version.yml@main
+
+  # Re-run CI on the exact commit being released (assumes a ci.yml exists)
+  quality:
+    needs: validate
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  build:
+    needs: [validate, quality]
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/ci-build.yml@main
+    with:
+      package-manager: pnpm
+      artifact-name: dist-${{ github.sha }}
+
+  publish:
+    needs: [validate, build]
+    if: github.event.inputs.dry_run != 'true'
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/cd-npm-publish.yml@main
+    with:
+      package-manager: pnpm
+      tag: ${{ needs.validate.outputs.npm_tag }}
+      artifact-name: dist-${{ github.sha }}
+      access: public
+      provenance: true
+      environment: npm-publish
+    secrets:
+      npm-token: ${{ secrets.NPM_TOKEN }}
+
+  release:
+    needs: [validate, publish]
+    if: github.event.inputs.dry_run != 'true'
+    uses: TQTuyen/ci-cd-toolkit/.github/workflows/cd-github-release.yml@main
+    with:
+      tag-name: ${{ needs.validate.outputs.tag }}
+      prerelease: ${{ needs.validate.outputs.is_prerelease == 'true' }}
