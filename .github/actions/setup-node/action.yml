@@ -5,7 +5,7 @@ inputs:
   node-version:
     description: Node.js version to use
     required: false
-    default: "20"
+    default: "24"
   node-version-file:
     description: File containing the Node.js version (e.g. .nvmrc, .node-version)
     required: false
