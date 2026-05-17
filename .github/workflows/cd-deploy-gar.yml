@@ -85,7 +85,7 @@ jobs:
         id: image-uri
         shell: bash
         run: |
-          TAG="${GITHUB_SHA::8}"
+          TAG="${GITHUB_SHA::7}"
           URI="${{ inputs.gcp-region }}-docker.pkg.dev/${{ inputs.repository }}:${TAG}"
           echo "uri=${URI}" >> "$GITHUB_OUTPUT"
 
